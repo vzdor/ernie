@@ -212,18 +212,35 @@ process_now(Request, Asset) ->
 unsafe_process_now(Request, Asset) ->
   BinaryTerm = Request#request.action,
   Term = binary_to_term(BinaryTerm),
+
   case Term of
-    {call, Mod, Fun, Args} ->
-      logger:debug("Calling ~p:~p(~p)~n", [Mod, Fun, Args]),
-      Sock = Request#request.sock,
-      {asset, Port, Token} = Asset,
-      logger:debug("Asset: ~p ~p~n", [Port, Token]),
-      {ok, Data} = port_wrapper:rpc(Port, BinaryTerm),
-      gen_tcp:send(Sock, Data),
-      ok = gen_tcp:close(Sock);
-    {cast, Mod, Fun, Args} ->
-      logger:debug("Casting ~p:~p(~p)~n", [Mod, Fun, Args]),
-      {asset, Port, Token} = Asset,
-      logger:debug("Asset: ~p ~p~n", [Port, Token]),
-      {ok, _Data} = port_wrapper:rpc(Port, BinaryTerm)
+      {call, Mod, Fun, Args} ->
+          logger:debug("Calling ~p:~p(~p)~n", [Mod, Fun, Args]),
+          Sock = Request#request.sock,
+          {asset, Port, Token} = Asset,
+          logger:debug("Asset: ~p ~p~n", [Port, Token]),
+
+          case port_wrapper:rpc(Port, BinaryTerm) of
+              {ok, stream} ->
+                  % logger:debug("Ernie got stream~n", []),
+                  write_stream(Sock);
+              {ok, Data} ->
+                  gen_tcp:send(Sock, Data)
+          end,
+          ok = gen_tcp:close(Sock);
+      {cast, Mod, Fun, Args} ->
+          logger:debug("Casting ~p:~p(~p)~n", [Mod, Fun, Args]),
+          {asset, Port, Token} = Asset,
+          logger:debug("Asset: ~p ~p~n", [Port, Token]),
+          {ok, _Data} = port_wrapper:rpc(Port, BinaryTerm)
   end.
+
+write_stream(Sock) ->
+    receive
+        {data, Data} ->
+            % logger:debug("Ernie got stream chunk~n", []),
+            gen_tcp:send(Sock, Data),
+            write_stream(Sock);
+        final -> ok;
+        Any -> logger:debug("write stream unknown message ~p~n", [Any])
+    end.

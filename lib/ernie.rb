@@ -165,7 +165,7 @@ class Ernie
         begin
           self.dispatch(mod, fun, args)
         rescue Object => e
-          # ignore
+          self.log(e.backtrace.join("\n"))
         end
         write_berp(output, t[:noreply])
       else
